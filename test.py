@@ -91,6 +91,7 @@ class InstagramBot:
             self.driver = webdriver.Chrome(service=service, options=options)
         else:
             self.driver = webdriver.Chrome(options=options)
+        self.inject_evasion_scripts()
         if openai_api_key:
             openai.api_key = openai_api_key
         self.init_database()
@@ -381,6 +382,87 @@ class InstagramBot:
     def quit(self):
         print("[System] Quitting browser...")
         self.driver.quit()
+
+    def inject_evasion_scripts(self):
+        try:
+            self.driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument",
+                {
+                    "source": """
+                        // 1. navigator.webdriver
+                        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+
+                        // 2. window.chrome
+                        window.chrome = { runtime: {} };
+
+                        // 3. navigator.plugins
+                        Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+
+                        // 4. navigator.languages
+                        Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+
+                        // 5. navigator.permissions
+                        const originalQuery = window.navigator.permissions.query;
+                        window.navigator.permissions.query = (parameters) => (
+                            parameters.name === 'notifications' ?
+                                Promise.resolve({ state: Notification.permission }) :
+                                originalQuery(parameters)
+                        );
+
+                        // 6. iframe spoof
+                        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+                            get: function() {
+                                return window;
+                            }
+                        });
+
+                        // 7. Function.prototype.toString spoof
+                        const oldToString = Function.prototype.toString;
+                        Function.prototype.toString = function() {
+                            if (this === window.navigator.permissions.query) {
+                                return "function query() { [native code] }";
+                            }
+                            return oldToString.call(this);
+                        };
+
+                        // 8. window.outerHeight/outerWidth spoof
+                        Object.defineProperty(window, 'outerHeight', {get: () => window.innerHeight + 88});
+                        Object.defineProperty(window, 'outerWidth', {get: () => window.innerWidth + 16});
+
+                        // 9. WebGL vendor/renderer spoof
+                        const getParameter = WebGLRenderingContext.prototype.getParameter;
+                        WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                            // UNMASKED_VENDOR_WEBGL
+                            if (parameter === 37445) {
+                                return 'Intel Inc.';
+                            }
+                            // UNMASKED_RENDERER_WEBGL
+                            if (parameter === 37446) {
+                                return 'Intel Iris OpenGL Engine';
+                            }
+                            return getParameter.call(this, parameter);
+                        };
+
+                        // 10. Notification.permission spoof
+                        Object.defineProperty(window.Notification, 'permission', {
+                            get: function() {
+                                return 'default';
+                            }
+                        });
+
+                        // 11. userAgentData spoof (for Chrome 89+)
+                        if (navigator.userAgentData) {
+                            Object.defineProperty(navigator.userAgentData, 'brands', {
+                                get: () => [{brand: 'Chromium', version: '123'}, {brand: 'Google Chrome', version: '123'}]
+                            });
+                            Object.defineProperty(navigator.userAgentData, 'mobile', {get: () => false});
+                            Object.defineProperty(navigator.userAgentData, 'platform', {get: () => 'Windows'});
+                        }
+                    """
+                },
+            )
+        except Exception as e:
+            print(f"[EvasionScript] 注入失敗: {e}")
 
 
 
