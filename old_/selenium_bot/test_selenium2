@@ -14,10 +14,11 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 import os
 import threading
-from flask import Flask, request, jsonify
+#from flask import Flask, request, jsonify
 import logging
 import uuid
-from werkzeug.utils import secure_filename
+#from werkzeug.utils import secure_filename
+from controller.click_save_login_button import InstagramWebUIController
 
 # ========== SessionManager ========== #
 class SessionManager:
@@ -60,8 +61,9 @@ class SessionManager:
 logging.basicConfig(filename='igbot.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 # ========== InstagramBot 增強 ========== #
+
 class InstagramBot:
-    def __init__(self, username=None, password=None, chromedriver_path=None, comment_list=None, openai_api_key=None, user_data_dir=None):
+    def __init__(self, username=None, password=None, chromedriver_path=None, comment_list=None, openai_api_key=None, user_data_dir=None, test_mode=False):
         self.username = username
         self.password = password
         self.comment_list = comment_list
@@ -76,6 +78,9 @@ class InstagramBot:
         self.daily_commented = 0
         self.last_action_date = None
         self.user_data_dir = user_data_dir
+        self.test_mode = test_mode
+        
+
         options = Options()
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--no-sandbox")
@@ -83,19 +88,33 @@ class InstagramBot:
         options.add_argument("--disable-web-security")
         options.add_argument("--no-first-run")
         options.add_argument("--no-default-browser-check")
+        options.add_argument("--disable-notifications")
+        options.add_argument("--disable-gcm-registration")
         options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
-        if user_data_dir:
-            options.add_argument(f"--user-data-dir={user_data_dir}")
-        if chromedriver_path:
-            service = Service(chromedriver_path)
-            self.driver = webdriver.Chrome(service=service, options=options)
+
+        try:
+            if user_data_dir:
+                options.add_argument(f"--user-data-dir={user_data_dir}")
+            if chromedriver_path:
+                service = Service(chromedriver_path)
+                self.driver = webdriver.Chrome(service=service, options=options)
+            else:
+                self.driver = webdriver.Chrome(options=options)
+            self.ic = InstagramWebUIController(self.driver)
+        except Exception as e:
+            print(f"Failed to start ChromeDriver: {e}")
+            exit()
+
+        if not test_mode:
+            self.inject_evasion_scripts()
+            if openai_api_key:
+                openai.api_key = openai_api_key
+            self.init_database()
+            self._login()
         else:
-            self.driver = webdriver.Chrome(options=options)
-        self.inject_evasion_scripts()
-        if openai_api_key:
-            openai.api_key = openai_api_key
-        self.init_database()
-        self._login()
+            print("[Test Mode] Browser launched without login or database.")
+        
+
 
     def wait(self, min_seconds=2, max_seconds=6):
         time.sleep(random.uniform(min_seconds, max_seconds))
@@ -114,7 +133,7 @@ class InstagramBot:
         self.conn.commit()
 
     def _login(self):
-        try:
+        #try:
             print(f"[Login] {self.username} Navigating to login page...")
             self.driver.get("https://www.instagram.com/accounts/login/")
             self.wait(5, 8)
@@ -125,6 +144,10 @@ class InstagramBot:
             self.wait()
             print("[Login] Submitting login form")
             self.driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
+            self.ic.click_save_login_button()
+
+            
+            """ 
             self.wait(8, 12)
             try:
                 self.driver.find_element(By.XPATH, "//button[contains(text(), 'Not Now')]").click()
@@ -145,7 +168,7 @@ class InstagramBot:
             logging.error(f"[Login Error] {self.username}: {e}")
             SessionManager.remove_instance(self.username)
             raise
-
+ """
     def _handle_session_error(self, func):
         try:
             return func()
@@ -492,16 +515,21 @@ if __name__ == "__main__":
     openai_api_key=openai_api_key
     )
 
-    bot.login()
+   
+
+    bot._login()
     input("Login 完成，請按 Enter 關閉瀏覽器...")
     bot.quit()
+
+
+"""
    
 # ========== 多帳號排程/自動切換 ========== #
 def multi_account_scheduler(accounts, hashtags, comment_list, chromedriver_path=None, openai_api_key=None, interval=600):
-    """
+    ""
     accounts: List[Dict]，每個 dict 包含 username, password
     interval: 每個帳號操作間隔秒數
-    """
+    ""
     while True:
         for acc in accounts:
             try:
@@ -607,12 +635,18 @@ if __name__ == "__main__":
     password = os.getenv("PASSWORD")
     chromedriver_path = os.getenv("CHROMEDRIVER_PATH")
     openai_api_key = os.getenv("OPENAI_API_KEY")
+    print(f"\nStarting IG Bot for: {username}\n")
+    print(f"\nStarting IG Bot for: {password}\n")
+    print(f"\nStarting IG Bot for: {chromedriver_path}\n")
+    print(f"\nStarting IG Bot for: {openai_api_key}\n")
+
+
     # 啟動 Flask API
-    app.run(host='0.0.0.0', port=5005)
+    #app.run(host='0.0.0.0', port=5005)
     # 或啟動多帳號排程
     # accounts = [
     #     {'username': username, 'password': password},
     #     # ... 其他帳號 ...
     # ]
     # multi_account_scheduler(accounts, hashtags, comment_list, chromedriver_path, openai_api_key, interval=600)
-   
+    """

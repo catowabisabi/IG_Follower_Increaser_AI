@@ -8,6 +8,14 @@ import time
 import logging
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+def wait_for_page_load(driver, timeout=10):
+    WebDriverWait(driver, timeout).until(
+        EC.presence_of_element_located((By.TAG_NAME, "body"))
+    )
+
 
 def simulate_human_delay(min_sec=0.5, max_sec=1):
     """模擬人為延遲"""
@@ -134,7 +142,31 @@ def random_actions(driver):
     except Exception as e:
         logging.warning(f"Random action failed: {str(e)}")
 
+
+def wait_for_captcha_or_page(driver, timeout=10):
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.any_of(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#captcha")),
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+        )
+    except Exception:
+        pass  # 超時就繼續
+
+def wait_for_loading_to_finish(driver, timeout=10):
+    try:
+        WebDriverWait(driver, timeout).until_not(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".loading-spinner"))
+        )
+    except Exception:
+        pass
+
 def is_captcha_present(driver):
+    wait_for_page_load(driver)
+    wait_for_captcha_or_page(driver)
+    wait_for_loading_to_finish(driver)
+
     """檢查是否存在驗證碼，並打印出現的 selector 或關鍵字"""
     captcha_selectors = [
         "#captcha",
@@ -155,7 +187,8 @@ def is_captcha_present(driver):
     
     # 關鍵字判斷
     page_source = driver.page_source.lower()
-    for indicator in ["verify you are human", "驗證你是人類" "請輸入驗證碼", "please enter the characters"]:
+    #print(page_source)
+    for indicator in ["verify you are human", "驗證你是人類", "請輸入驗證碼", "please enter the characters"]:
         if indicator in page_source:
             print(f"[CAPTCHA] 命中關鍵字: {indicator}")
             return True
