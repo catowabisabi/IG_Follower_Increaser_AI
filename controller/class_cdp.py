@@ -1,8 +1,16 @@
+import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, '..'))  # 如果是兩層就加 '..', '..'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+
 from dotenv import load_dotenv
 load_dotenv(override=True)
 import time
 import subprocess
-import os
+
 import requests
 import json
 from websocket import create_connection
@@ -581,7 +589,7 @@ class CDPChromeClient:
 
         
     
-    def click_all_images_one_by_one(self, delay=5):
+    def click_all_images_one_by_one_0(self, delay=5):
         """
         點擊頁面上所有 <img>，每次點擊後等 delay 秒。
         """
@@ -629,6 +637,73 @@ class CDPChromeClient:
         logging.info("🎉 完成所有圖片處理")
 
     
+    def click_all_images_one_by_one(self, delay=5, callback=None, max_follow=5):
+        """
+        點擊頁面上所有 <img>，每次點擊後等 delay 秒。
+        可選 callback(img_id, index)：每次點擊完會執行，需回傳 True/False。
+        """
+        follow_count = 0
+
+        logging.info("開始循環點擊所有 <img> 元素...")
+
+        js_code = """
+        (function() {
+            const images = Array.from(document.querySelectorAll('img'));
+            return images.map((img, idx) => {
+                img.setAttribute('data-img-id', 'img_' + idx);
+                return img.getAttribute('data-img-id');
+            });
+        })()
+        """
+        img_ids = self.execute_script(js_code)
+
+        if not img_ids:
+            logging.warning("找不到任何 <img> 元素")
+            return
+
+        logging.info(f"發現 {len(img_ids)} 張圖片，準備逐一點擊...")
+
+        for index, img_id in enumerate(img_ids):
+            if follow_count >= max_follow:
+                logging.info(f"已達到 follow 上限 {max_follow}，停止點擊圖片")
+                break
+
+            logging.info(f"🖱️ 點擊圖片：{img_id}")
+
+            click_script = f"""
+            (function() {{
+                const target = document.querySelector('[data-img-id="{img_id}"]');
+                if (!target) return "❌ 找唔到 {img_id}";
+                target.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+                target.click();
+                return "✅ Clicked image: {img_id}";
+            }})()
+            """
+            result = self.execute_script(click_script)
+            logging.info(result)
+            # 如果找不到目標，就停止
+            if "❌" in result:
+                logging.error(f"❌ 停止：找唔到圖片 {img_id}")
+                break  # 或 raise Exception(f"找唔到圖片 {img_id}")
+
+            # ✅ 執行 callback（如果有提供）
+            if callable(callback):
+                try:
+                    did_follow = callback(img_id, index)
+                    if did_follow:  # 只有成功 follow 才加
+                        follow_count += 1
+                        logging.info(f"已經 Follow {follow_count} 位用戶...")
+                except Exception as e:
+                    logging.error(f"callback 出錯：{e}")
+
+            # 等 delay 秒 + 少少隨機時間
+            wait_time = delay + (random.random() * 2)
+            logging.info(f"等緊 {wait_time:.1f} 秒再處理下一張...")
+            time.sleep(wait_time)
+
+        logging.info("🎉 完成所有圖片處理")
+
+    
 
     def press_button_sequence(self, order=[], delay=2.0):
         """
@@ -636,6 +711,7 @@ class CDPChromeClient:
         :param order: 執行步驟清單
         :param delay: 每步最大延遲秒數（最少 0.8 秒）
         """
+        time.sleep(2)
         for idx, item in enumerate(order):
             try:
                 logging.info(f"➡️ 開始第 {idx + 1} 步：{item}")
@@ -681,5 +757,251 @@ class CDPChromeClient:
 
             except Exception as e:
                 logging.error(f"❌ 第 {idx + 1} 步發生錯誤：{e}", exc_info=True)
+    
 
 
+    def check_text_exists(self, text, case_sensitive=False):
+        """
+        檢查頁面是否包含特定文字
+        :param text: 要搜尋的文字
+        :param case_sensitive: 是否區分大小寫
+        :return: True/False 和找到的位置資訊
+        """
+        logging.info(f"🔍 搜尋頁面文字：'{text}'")
+        
+        text_js = json.dumps(text)
+        case_flag = "true" if case_sensitive else "false"
+        
+        js_code = f"""
+        (function() {{
+            const searchText = {text_js};
+            const caseSensitive = {case_flag};
+            const bodyText = document.body.innerText || document.body.textContent || '';
+            
+            const targetText = caseSensitive ? searchText : searchText.toLowerCase();
+            const pageText = caseSensitive ? bodyText : bodyText.toLowerCase();
+            
+            const found = pageText.includes(targetText);
+            const count = (pageText.match(new RegExp(targetText.replace(/[.*+?^${{}}()|[\\]\\\\]/g, '\\\\$&'), 'g')) || []).length;
+            
+            return {{
+                found: found,
+                count: count,
+                searchText: searchText,
+                caseSensitive: caseSensitive
+            }};
+        }})()
+        """
+        
+        result = self.execute_script(js_code)
+        if result:
+            logging.info(f"📊 搜尋結果：找到 {result['count']} 次 '{text}'")
+            return result['found'], result['count']
+        return False, 0
+
+    def check_element_exists(self, selector):
+        """
+        檢查特定CSS選擇器的元素是否存在
+        :param selector: CSS選擇器
+        :return: 存在數量和基本資訊
+        """
+        logging.info(f"🔍 檢查元素：'{selector}'")
+        
+        selector_js = json.dumps(selector)
+        js_code = f"""
+        (function() {{
+            const elements = document.querySelectorAll({selector_js});
+            return {{
+                count: elements.length,
+                exists: elements.length > 0,
+                selector: {selector_js},
+                elements: Array.from(elements).slice(0, 5).map(el => ({{
+                    tagName: el.tagName,
+                    className: el.className,
+                    id: el.id,
+                    text: (el.innerText || el.textContent || '').substring(0, 100)
+                }}))
+            }};
+        }})()
+        """
+        
+        result = self.execute_script(js_code)
+        if result:
+            logging.info(f"📊 元素檢查結果：找到 {result['count']} 個 '{selector}' 元素")
+            return result
+        return {'count': 0, 'exists': False}
+
+    def find_elements_by_text(self, text, tag_names=None, case_sensitive=False):
+        """
+        查找包含特定文字的元素
+        :param text: 要搜尋的文字
+        :param tag_names: 限制搜尋的標籤名稱列表，如 ['button', 'a', 'span']
+        :param case_sensitive: 是否區分大小寫
+        :return: 包含該文字的元素列表
+        """
+        logging.info(f"🔍 搜尋包含文字 '{text}' 的元素")
+        
+        text_js = json.dumps(text)
+        tags_js = json.dumps(tag_names) if tag_names else "null"
+        case_flag = "true" if case_sensitive else "false"
+        
+        js_code = f"""
+        (function() {{
+            const searchText = {text_js};
+            const targetTags = {tags_js};
+            const caseSensitive = {case_flag};
+            
+            const selector = targetTags ? targetTags.join(',') : '*';
+            const elements = document.querySelectorAll(selector);
+            
+            const matches = [];
+            
+            for (let el of elements) {{
+                const elText = el.innerText || el.textContent || '';
+                const searchIn = caseSensitive ? elText : elText.toLowerCase();
+                const searchFor = caseSensitive ? searchText : searchText.toLowerCase();
+                
+                if (searchIn.includes(searchFor)) {{
+                    matches.push({{
+                        tagName: el.tagName,
+                        className: el.className,
+                        id: el.id,
+                        text: elText.substring(0, 200),
+                        ariaLabel: el.getAttribute('aria-label'),
+                        hasClickHandler: el.onclick !== null || el.addEventListener !== undefined
+                    }});
+                }}
+            }}
+            
+            return {{
+                searchText: searchText,
+                totalMatches: matches.length,
+                elements: matches.slice(0, 10)  // 只返回前10個
+            }};
+        }})()
+        """
+        
+        result = self.execute_script(js_code)
+        if result:
+            logging.info(f"📊 找到 {result['totalMatches']} 個包含 '{text}' 的元素")
+            return result
+        return {'totalMatches': 0, 'elements': []}
+
+    def check_multiple_keywords(self, keywords, mode='any'):
+        """
+        檢查頁面是否包含多個關鍵字
+        :param keywords: 關鍵字列表
+        :param mode: 'any' (任一個存在) 或 'all' (全部存在)
+        :return: 檢查結果
+        """
+        logging.info(f"🔍 批量搜尋關鍵字：{keywords} (模式：{mode})")
+        
+        keywords_js = json.dumps(keywords)
+        mode_js = json.dumps(mode)
+        
+        js_code = f"""
+        (function() {{
+            const keywords = {keywords_js};
+            const mode = {mode_js};
+            const bodyText = (document.body.innerText || document.body.textContent || '').toLowerCase();
+            
+            const results = {{}};
+            let foundCount = 0;
+            
+            for (let keyword of keywords) {{
+                const found = bodyText.includes(keyword.toLowerCase());
+                results[keyword] = found;
+                if (found) foundCount++;
+            }}
+            
+            const success = mode === 'any' ? foundCount > 0 : foundCount === keywords.length;
+            
+            return {{
+                success: success,
+                mode: mode,
+                foundCount: foundCount,
+                totalKeywords: keywords.length,
+                results: results
+            }};
+        }})()
+        """
+        
+        result = self.execute_script(js_code)
+        if result:
+            logging.info(f"📊 關鍵字搜尋：{result['foundCount']}/{result['totalKeywords']} 個找到")
+            return result
+        return {'success': False, 'foundCount': 0}
+
+    def wait_for_text_appear(self, text, timeout=15, case_sensitive=False):
+        """
+        等待特定文字出現在頁面上
+        :param text: 要等待的文字
+        :param timeout: 超時時間（秒）
+        :param case_sensitive: 是否區分大小寫
+        :return: True/False
+        """
+        logging.info(f"⏳ 等待文字 '{text}' 出現...")
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            found, count = self.check_text_exists(text, case_sensitive)
+            if found:
+                logging.info(f"✅ 文字 '{text}' 已出現")
+                return True
+            time.sleep(0.5)
+        
+        logging.warning(f"⏰ 超時：文字 '{text}' 在 {timeout} 秒內未出現")
+        return False
+
+    def get_page_summary(self):
+        """
+        獲取頁面的基本摘要資訊
+        :return: 頁面摘要
+        """
+        logging.info("📄 獲取頁面摘要...")
+        
+        js_code = """
+        (function() {
+            return {
+                title: document.title,
+                url: window.location.href,
+                textLength: (document.body.innerText || '').length,
+                imageCount: document.querySelectorAll('img').length,
+                linkCount: document.querySelectorAll('a').length,
+                buttonCount: document.querySelectorAll('button, [role="button"]').length,
+                formCount: document.querySelectorAll('form').length,
+                inputCount: document.querySelectorAll('input, textarea, select').length
+            };
+        })()
+        """
+        
+        result = self.execute_script(js_code)
+        if result:
+            logging.info(f"📊 頁面摘要：標題={result['title'][:50]}..., 圖片={result['imageCount']}, 連結={result['linkCount']}")
+            return result
+        return None
+
+if __name__ == "__main__":
+    # 檢查是否有"登入"文字
+
+    cdp_client = CDPChromeClient(ws_url="ws://localhost:9222/devtools/page/87A13E448F8AD2B7F2207204655F0CEF")
+    # 檢查是否有"登入"文字
+    text = "关注"
+    found, count = cdp_client.check_text_exists(text)
+    if found:
+        print(f"找到 {count} 次'{text}'文字")
+
+    # 檢查是否有登入按鈕
+    result = cdp_client.find_elements_by_text("登入", tag_names=['button', 'a'])
+    if result['totalMatches'] > 0:
+        print(f"找到 {result['totalMatches']} 個登入按鈕")
+
+    # 批量檢查關鍵字
+    keywords = ["登入", "註冊", "用户", "密碼"]
+    result = cdp_client.check_multiple_keywords(keywords, mode='any')
+    if result['success']:
+        print("頁面包含至少一個關鍵字")
+
+    # 等待特定文字出現
+    if cdp_client.wait_for_text_appear("載入完成", timeout=20):
+        print("頁面已載入完成")

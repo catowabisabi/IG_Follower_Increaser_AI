@@ -8,7 +8,7 @@ import os
 import logging
 import os
 import sys
-from ig.class_cdp import CDPChromeClient
+from controller.class_cdp import CDPChromeClient
 
 
 

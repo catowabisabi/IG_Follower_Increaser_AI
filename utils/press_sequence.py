@@ -17,7 +17,7 @@ sequence = [
     }
 ]
 
-follow_sequence = [
+sequence_follow = [
     ['关注'],
     ['赞'],
     ['评论'],
@@ -28,7 +28,7 @@ follow_sequence = [
     ['发布']
 ]
 
-img_info_page_sequence = [
+sequence_img_info_page = [
     ['更多选项'],
     ['账户简介']
 ]
@@ -42,7 +42,7 @@ sequence_logout = [
 
 
 sequence_login=[
-    ['切换账户'],
+    ['切换账户']
 
 ]
 
