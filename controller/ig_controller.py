@@ -60,6 +60,7 @@ class IGController:
 
     def logout(self):
         self.cdp_client.press_button_sequence(sequence_logout, delay=2.5)
+        
 
 
     def login(self):
@@ -90,6 +91,14 @@ class IGController:
             
             self.cdp_client.navigate("https://www.instagram.com/")
             self.cdp_client.wait_for_element('button, div[role="button"]', timeout=5)
+            time.sleep(5)
+
+            if self._find_many_elements_by_text(keywords =["首页", "搜索", "探索", "消息"], mode = 'all' ):
+                self.logout()
+                time.sleep(5)
+
+
+
             self.cdp_client.press_button_sequence(sequence_login)
             #self.cdp_client.click_button_by_texts(sequence_login[0])
             # 如果是登入頁, 先登入
@@ -242,7 +251,9 @@ class IGController:
             },
             ['发布']
         ]
-        if self._is_not_followed:
+        time.sleep(1.5)
+        is_not_followed_found, _ = self._is_not_followed()
+        if is_not_followed_found:
             self.cdp_client.press_button_sequence(sequence_follow, delay=2.5)
             self.cdp_client.press_button_sequence(sequence_img_info_page, delay=2.5)
             time.sleep(2)
@@ -302,11 +313,9 @@ class IGController:
         for keywords in random_keywords:
             self.search(keywords)
             time.sleep(3)
-            self.click_all_images_one_by_one(callback=lambda *args, **kwargs: self.img_page_following_and_comment())
+            self.click_all_images_one_by_one(callback=lambda *args, **kwargs: self.img_page_following_and_comment(), max_follow=click_court)
             
 
-
-            this_click_court = click_court
 
             time.sleep(5)
   
@@ -317,13 +326,18 @@ class IGController:
 
 
 if __name__ == "__main__":
-    ig = IGController(ws_url="ws://localhost:9222/devtools/page/F3F25069B29A7B9FA0C81ACF43B92FDE")
+    try:
+        ig = IGController(ws_url="ws://localhost:9222/devtools/page/F3F25069B29A7B9FA0C81ACF43B92FDE")
     
-    
-    #ig = IGController()
-    #ig.login()
+    except Exception as e:
+        
+        logging.warning('找不到指定Broswer, 再次登入...')
+        ig = IGController()
+
+        ig.login()
 
     # follow, comment, and like one by one
 
-    ig._find_element_by_text(text="关注", tag_names=['button', 'a'])
-    #ig.search_keywords()
+    #ig._find_element_by_text(text="关注", tag_names=['button', 'a'])
+    ig.search_keywords(court = 3, click_court=3)
+    ig.close()
