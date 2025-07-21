@@ -1,0 +1,12 @@
+POST /run_ig
+Content-Type: application/json
+
+{
+  "IG_USERNAME": "your_username",
+  "IG_PASSWORD": "your_password",
+  "hashtags": ["#python", "#ai"],
+  "search_keywords": ["python", "automation"],
+  "random_reply": ["Nice!", "Great post!", "Love it!"],
+  "court": 3,
+  "click_court": 3
+}

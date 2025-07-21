@@ -10,6 +10,7 @@ import time
 import random
 from controller.class_cdp import CDPChromeClient # 控制
 from utils.html_fetcher import HtmlSaver
+from controller.class_db import FollowedUserDB
 
 
 from config import random_reply
@@ -20,7 +21,7 @@ import random
 
 # 加入設計好的步驟
 from utils.press_sequence import sequence_img_info_page, sequence_logout, sequence_login
-from config import hashtags, search_keywords, random_reply
+from config import  search_keywords, random_reply
 
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(asctime)s - %(message)s', datefmt='%H:%M:%S')
@@ -29,7 +30,10 @@ logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(asctime)s - %(
 
 
 class IGController:
-    def __init__(self, ws_url=None):
+    
+    def __init__(self, ig_user_id = None,  ws_url=None):
+        if ig_user_id == None:
+            raise ValueError("ig_user_id 不能為 None")
         if ws_url:
             self.ws_url = ws_url
             self.cdp_client = CDPChromeClient(ws_url=self.ws_url)
@@ -37,6 +41,9 @@ class IGController:
         else:
             self.ws_url = None
             logging.info(f"--- 無法連接到現有Broswer, 沒有輸入 WS URL... ---")
+
+        self.ig_user_id = ig_user_id
+
             
 
     
@@ -172,7 +179,7 @@ class IGController:
         else:
             self.cdp_client.click_element_by_aria_label(['关键词'])
 
-    def save_followed_user(self, username, file_path='followed_user.txt'):
+    def save_followed_user_0_txt(self, username, file_path='followed_user.txt'):
         """
         如果 username 未存在於 txt 檔中，就將佢加一行到檔案，避免重覆紀錄。
         """
@@ -198,6 +205,23 @@ class IGController:
 
         except Exception as e:
             logging.error(f"❌ 儲存用戶名失敗：{e}")
+
+    def save_followed_user(self, username, email=None):
+        """
+        使用 SQLite 資料庫儲存每個 IG 使用者已 follow 的 username。
+        """
+        if not self.ig_user_id:
+            logging.warning("⚠️ ig_user_id 未設定，無法儲存")
+            return
+        if not username or not isinstance(username, str):
+            logging.warning("⚠️ username 無效，無儲存")
+            return
+        db = FollowedUserDB()
+        db.add_user(self.ig_user_id, email)
+        if db.add_followed_user(self.ig_user_id, username):
+            logging.info(f"✅ 已儲存用戶名：{username} (user_id={self.ig_user_id})")
+        else:
+            logging.info(f"⚠️ 用戶名已存在：{username}，跳過儲存 (user_id={self.ig_user_id})")
 
     def save_html (self):
         fetcher = HtmlSaver()
@@ -252,20 +276,35 @@ class IGController:
             ['发布']
         ]
         time.sleep(1.5)
+        username = None
         is_not_followed_found, _ = self._is_not_followed()
         if is_not_followed_found:
+            # 先取得用戶名
+            tmp_username = self.cdp_client.get_bk_components_heading()
+            if tmp_username:
+                username = tmp_username[0]['text']
+                # 查詢 DB 是否已 follow
+                db = FollowedUserDB()
+                if db.has_followed(self.ig_user_id, username):
+                    logging.info(f"⚠️ 用戶名已存在於 DB：{username}，跳過 follow")
+                    self.cdp_client.click_button_by_texts(['关闭'])
+                    return {'user': 'already followed'}
+            # 執行 follow 流程
             self.cdp_client.press_button_sequence(sequence_follow, delay=2.5)
             self.cdp_client.press_button_sequence(sequence_img_info_page, delay=2.5)
             time.sleep(2)
-            username = self.cdp_client.get_bk_components_heading()
+            if not username:
+                username = self.cdp_client.get_bk_components_heading()
+                if username:
+                    username = username[0]['text']
             if username:
-                logging.info(f"已 follow 用戶: {username[0]['text']}")
+                logging.info(f"已 follow 用戶: {username}")
                 self.cdp_client.click_button_by_texts(['关闭'])
-                self.save_followed_user(username=username[0]['text'])
-                return {'user':username}
+                self.save_followed_user(username=username)
+                return {'user': username}
             else:
                 return {'user': 'user is null'}
-        else: 
+        else:
             time.sleep(1)
             return {'user': 'already followed'}
     
