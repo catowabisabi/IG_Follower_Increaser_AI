@@ -152,8 +152,25 @@ class CDPChromeClient:
 
     def navigate(self, url):
         logging.info(f"正在導航至 {url}...")
+        self._send("Network.enable")
+
+        self._send("Network.setExtraHTTPHeaders", {
+            "headers": {
+                "Accept-Language": "zh-CN"
+            }
+        })
         self._send("Page.enable")
         self._send("Page.navigate", {"url": url})
+        # 等待頁面載入完成
+        while True:
+            try:
+                message = json.loads(self.ws.recv())
+                if message.get("method") == "Page.loadEventFired":
+                    logging.info("頁面加載完成。")
+                    break
+            except Exception as e:
+                logging.warning(f"等待加載時出錯: {e}")
+                break
 
     def wait_for_element(self, selector, timeout=15):
         logging.info(f"正在等待元素 '{selector}' 出現...")
