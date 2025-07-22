@@ -4,3 +4,4 @@ python-dotenv==1.1.0
 selenium==4.27.1
 fastapi 
 uvicorn
+requests

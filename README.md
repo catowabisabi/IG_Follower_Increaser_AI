@@ -52,7 +52,7 @@ This is an automated Instagram engagement tool with the following features:
 
 5. 運行程式：
    ```bash
-   python run.py
+   python -m uvicorn ig_auto_comment_api:app --reload
    ```
 
 ### English:

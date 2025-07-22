@@ -46,6 +46,7 @@ class CDPChromeClient:
             f"--remote-debugging-port=9222",
             f"--user-data-dir={user_data_dir}",
             "--remote-allow-origins=*",
+            " --lang=zh-CN",
            # "about:blank"
         ]
         logging.info("以偵錯模式啟動 Chrome...")
