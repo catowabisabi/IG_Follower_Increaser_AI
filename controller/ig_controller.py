@@ -157,7 +157,7 @@ class IGController:
             time.sleep(3)
 
             # 取消一開始的window
-            self.cdp_client.click_button_by_texts(['保存信息', '儲存資料'])
+            self.cdp_client.click_button_by_texts(['以后再说', '儲存資料'])
             logging.info(f"已完成登入: {ig_user}")
         
         except Exception as e:
@@ -366,12 +366,16 @@ class IGController:
 
 if __name__ == "__main__":
     try:
-        ig = IGController(ws_url="ws://localhost:9222/devtools/page/F3F25069B29A7B9FA0C81ACF43B92FDE")
+        ig = IGController(ig_user_id="testing@gmail.com",ws_url="ws://localhost:9222/devtools/page/F3F25069B29A7B9FA0C81ACF43B92FDE")
     
+
+    except KeyboardInterrupt:
+        print("⏹️ 已中断脚本，正在优雅退出...")
+        
     except Exception as e:
         
         logging.warning('找不到指定Broswer, 再次登入...')
-        ig = IGController()
+        ig = IGController(ig_user_id="testing@gmail.com",)
 
         ig.login()
 

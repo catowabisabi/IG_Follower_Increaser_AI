@@ -17,7 +17,7 @@ def main():
     logging.info("--- 啟動 Instagram 自動化腳本 ---")
     cdp_client = CDPChromeClient(ws_url="ws://localhost:9222/devtools/page/B26E2C5BFC98B0A0B62C7A436014D0A3")
     try:
-        result = cdp_client.click_button_by_texts(['保存信息', '儲存資料'])
+        result = cdp_client.click_button_by_texts(['以后再说', '儲存資料'])
         result = cdp_client.click_element_by_aria_label(['首页'])
         result = cdp_client.click_element_by_aria_label(['搜索'])
         result = cdp_client.type_into_element_by_aria_label('搜索输入', 'AI 美女')

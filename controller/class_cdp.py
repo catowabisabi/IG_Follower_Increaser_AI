@@ -581,7 +581,7 @@ class CDPChromeClient:
     
     def follow_user(self, delay = 1):
         logging.info("開始點擊Follow...")
-        #result = self.click_button_by_texts(['保存信息', '儲存資料'])
+        #result = self.click_button_by_texts(['以后再说', '儲存資料'])
         #result = self.click_element_by_aria_label(['首页'])
         #result = self.type_into_element_by_aria_label('搜索输入', 'AI 美女')
         time.sleep(2)
